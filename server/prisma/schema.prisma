@@ -27,10 +27,11 @@ model User {
 
 model Bot {
   id             String  @id @default(uuid())
-  title          String
-  destinationUrl String
+  title          String  @unique
+  destinationUrl String  @unique
   Author         User    @relation(fields: [userId], references: [id])
   userId         String
   companyName    String?
   tokensUtilized Int     @default(0)
+  docsUploaded   Int
 }

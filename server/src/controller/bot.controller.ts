@@ -7,6 +7,7 @@ import path from "path";
 import { Document } from "langchain/document"
 import { pinecone, uploadToPinecone } from "../utils/bot.utils";
 
+
 export async function getAllBots(req: Request, res: Response, next: NextFunction) {
     try {
         const { user } = req
@@ -38,19 +39,19 @@ export async function getBotsById(req: Request, res: Response, next: NextFunctio
 
 export async function createBots(req: Request, res: Response, next: NextFunction) {
     try {
-        const { user } = req
+        const user = req.user
         if (!user) {
-            throw new CustomError("Unauthorized re-login to continue", 401)
+            throw new CustomError("Unauthorized re-login to continueeeee", 401)
         }
         const { title, destinationUrl, companyName }: { title: string, destinationUrl: string, companyName: string } = req.body
         if (!title || typeof title !== "string") {
             throw new CustomError("invalid title", 400)
         }
         if (!destinationUrl || typeof destinationUrl !== "string") {
-            throw new CustomError("invalid title", 400)
+            throw new CustomError("invalid url", 400)
         }
         if (!companyName || typeof companyName !== "string") {
-            throw new CustomError("invalid title", 400)
+            throw new CustomError("invalid company name", 400)
         }
         const { file } = req
         if (file!.mimetype !== "application/pdf") {
@@ -62,7 +63,6 @@ export async function createBots(req: Request, res: Response, next: NextFunction
         for (const chunk of text) {
             data += chunk
         }
-        console.log(data)
         var regex = /Q\d+:/g;
 
         var matches = data.match(regex) as string[];
@@ -80,16 +80,14 @@ export async function createBots(req: Request, res: Response, next: NextFunction
             const doc = new Document({ pageContent: chunk, metadata: { destinationUrl } })
             docs.push(doc)
         }
-        await uploadToPinecone(docs, embeddings)
+        await uploadToPinecone(docs, embeddings, destinationUrl)
 
-        const bot = await prisma.bot.create({ data: { title: title, destinationUrl: destinationUrl, userId: req.user!.id } })
-
-        //todo: give script tag to user as json
+        const bot = await prisma.bot.create({ data: { title: title, destinationUrl: destinationUrl, userId: req.user!.id, companyName: companyName, docsUploaded: docs.length } })
 
         res.status(200).json({
             title,
             destinationUrl,
-            file
+            bot
         })
     } catch (err: any) {
         return next(err)
@@ -124,7 +122,7 @@ export async function updateBot(req: Request, res: Response, next: NextFunction)
     if (!id || typeof id !== "string") {
         throw new CustomError("invalid id", 400)
     }
-    const bot = await prisma.bot.findUnique({ where: { id: id }, select: { id: true, title: true, destinationUrl: true, tokensUtilized: true } })
+    const bot = await prisma.bot.findUnique({ where: { id: id }, select: { id: true, title: true, destinationUrl: true, tokensUtilized: true, docsUploaded: true } })
     if (!bot) {
         throw new CustomError("bot not found", 404)
     }
@@ -132,13 +130,18 @@ export async function updateBot(req: Request, res: Response, next: NextFunction)
     if (!file || file!.mimetype !== "application/pdf") {
         throw new CustomError("no file provided or invalid file type requires PDF", 400)
     }
+
+    const index = pinecone.index(process.env.PINECONE_INDEX as string)
+    const pineconestore = new PineconeStore(embeddings, { pineconeIndex: index })
     //todo: delete old embeddings
-    const vectorstore = await PineconeStore.fromExistingIndex(embeddings, { pineconeIndex: pinecone.index(process.env.PINECONE_INDEX as string) })
-    const result = await vectorstore.similaritySearch("", 1000, { PineconeMetaData: { destinationUrl: bot.destinationUrl } })
-    console.log(result)
+    const vectorStore = await PineconeStore.fromExistingIndex(embeddings, {
+        pineconeIndex: index, filter: {
+            destinationUrl: { $eq: bot.destinationUrl }
+        },
+    })
 
     return res.status(200).json({
-        message: "Docs updated successfully"
+        message: "Docs updated successfully",
     })
 
 

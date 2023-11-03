@@ -110,19 +110,39 @@ export async function getAllUsers(req: Request, res: Response, next: NextFunctio
 }
 
 export async function updateUser(req: Request, res: Response, next: NextFunction) {
-    const { firstName, lastName, email, password, role }: { firstName: string, lastName: string | undefined, email: string, password: string, role: string | null } = req.body
-    const { user } = req
-    if (!user) {
-        throw new CustomError("Unauthorized re-login to continue", 401)
+    try {
+        const { firstName, lastName, email }: { firstName: string, lastName: string | undefined, email: string, password: string, role: string | null } = req.body
+        const { user } = req
+        if (!user) {
+            throw new CustomError("Unauthorized re-login to continue", 401)
+        }
+        if (!firstName && !lastName && !email) {
+            throw new CustomError("no updated field passed", 400)
+        }
+        const data: any = {}
+        if (firstName) {
+            data.firstName = firstName
+        }
+        if (lastName) {
+            data.lastName = lastName
+        }
+        if (email) {
+            data.lastName = lastName
+        }
+        const updateUser = await prisma.user.update({ where: { id: user!.id }, data: data, select: { id: true, firstName: true, email: true } })
+        const accessToken = signJwt({ user: updateUser }, "15m")
+        const refreshToken = signJwt({ user: updateUser }, "2d")
+        res.cookie("accessToken", accessToken, { httpOnly: true, secure: true, maxAge: 15 * 60 * 1000 })
+        res.cookie("refreshToken", refreshToken, { httpOnly: true, secure: true, maxAge: 2 * 24 * 60 * 60 * 1000 })
+        res.status(200).json({
+            message: `${updateUser.firstName} updated succesfully`,
+            updateUser
+        })
+
+    } catch (err: any) {
+        return next(err)
+
     }
-    const data: any = {}
-    if (firstName) {
-        data.firstName = firstName
-    }
-    if (lastName) {
-        data.lastName = lastName
-    }
-    const updateUser = await prisma.user.update({ where: { id: user!.id }, data: data })
 }
 
 export async function deleteUser(req: Request, res: Response, next: NextFunction) {
@@ -133,7 +153,7 @@ export async function deleteUser(req: Request, res: Response, next: NextFunction
         }
         const deleteUser = await prisma.user.delete({ where: { id: user!.id } })
         res.status(204).json({
-            "message": "user deleted successfully",
+            "message": `user ${deleteUser.firstName}'s account deleted successfully`,
             user: deleteUser
         })
     } catch (err: any) {

@@ -6,14 +6,16 @@ export const pinecone = new Pinecone({
     environment: process.env.PINECONE_ENV as string
 })
 
-export async function uploadToPinecone(docs: any, embeddings: any, maxConcurrency?: number) {
+export async function uploadToPinecone(docs: any, embeddings: any, destinationUrl: string, maxConcurrency?: number) {
     const index = pinecone.Index(process.env.PINECONE_INDEX as string)
-    console.log(index)
     let options: any = {
-        pineconeIndex: index
+        pineconeIndex: index,
+
     }
     if (maxConcurrency) {
         options.maxConcurrency = maxConcurrency
     }
-    await PineconeStore.fromDocuments(docs, embeddings, options)
+    await PineconeStore.fromDocuments(docs, embeddings, {
+        pineconeIndex: index, filter: { destinationUrl: { $eq: destinationUrl } }
+    })
 }
